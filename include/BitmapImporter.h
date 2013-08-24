@@ -13,8 +13,6 @@
 #include <fstream>
 #include <stdint.h>
 
-namespace Accelerate{
-
 struct HeaderStr{
     //BMP header
     uint16_t magic_number;
@@ -48,10 +46,10 @@ protected:
     unsigned int width;
     unsigned int height;
     Image();
-    Accelerate::HeaderStr header;
+    HeaderStr header;
 
 
-	void copy_column(Accelerate::Image& result, unsigned int column_number, unsigned int scale) const;	
+    void copy_column(Image& result, unsigned int column_number, unsigned int scale) const;
 public:
     ~Image();
 
@@ -73,8 +71,6 @@ public:
     void write(std::ostream &out);
 };
 
-}
-
-std::ostream& operator<<(std::ostream &o, const Accelerate::PixelStr& p);
-std::ostream& operator<<(std::ostream &o, Accelerate::Image& im);
+std::ostream& operator<<(std::ostream &o, const PixelStr& p);
+std::ostream& operator<<(std::ostream &o, Image& im);
 #endif
