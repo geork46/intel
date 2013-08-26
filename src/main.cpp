@@ -46,7 +46,15 @@ struct BigPixelStr
     int r;
     int g;
     int b;
+    BigPixelStr();
+    BigPixelStr(PixelStr const &);
 };
+
+BigPixelStr::BigPixelStr() : r(0), g(0), b(0) {}
+
+BigPixelStr::BigPixelStr(PixelStr const &o) : r(o.r), g(o.g), b(o.b)
+{
+}
 
 inline PointR rotatePoint(Point const &p, int x, int y, double a_cos, double a_sin)
 {
@@ -84,6 +92,27 @@ bool g(uint32_t *a, uint32_t *b, int n)
     return true;
 }
 
+int32_t getHash(BigPixelStr *str2, int n)
+{
+    double r(0), g(0), b(0);
+    for (int j = 0; j < n; ++j)
+    {
+        r += str2[j].r;
+        g += str2[j].g;
+        b += str2[j].b;
+    }
+    r /= n;
+    g /= n;
+    b /= n;
+    int32_t d = 0;
+    for (int j = 0; j < n; ++j)
+    {
+        d |= (str2[j].r > r) ? 1 << (j * 3 ) : 0;
+        d |= (str2[j].g > g) ? 1 << (j * 3 + 1) : 0;
+        d |= (str2[j].b > b) ? 1 << (j * 3 + 2) : 0;
+    }
+    return d;
+}
 
 void create_hash(string temp_name)
 {
@@ -142,27 +171,11 @@ void create_hash(string temp_name)
                 }
         for (int i = 0; i < n; ++i)
         {
-            double r(0), g(0), b(0);
-            for (int j = 0; j < n; ++j)
-            {
-                r += str2[i * n + j].r;
-                g += str2[i * n + j].g;
-                b += str2[i * n + j].b;
-            }
-            r /= n;
-            g /= n;
-            b /= n;
-            g2[i] = 0;
-            for (int j = 0; j < n; ++j)
-            {
-                g2[i] |= (str2[i * n + j].r > r) ? 1 << (j * 3 ) : 0;
-                g2[i] |= (str2[i * n + j].g > g) ? 1 << (j * 3 + 1) : 0;
-                g2[i] |= (str2[i * n + j].b > b) ? 1 << (j * 3 + 2) : 0;
-            }
+            g2[i] = getHash(str2 + i * n, n);
         }
         if (!g(g2, g1, n) )
         {
-            cout << a << endl;
+//            cout << a << endl;
             RotateHashItem item;
             g1 = new uint32_t[n];
             for (int i = 0; i < n; ++i)
@@ -182,7 +195,7 @@ void create_hash(string temp_name)
             }
             if (!f)
             {
-                cout << "--- " << a << endl;
+//                cout << "--- " << a << endl;
                 s++;
             }
 //            for (int i = 0; i < n * n; ++i)
@@ -209,6 +222,14 @@ void create_hash(string temp_name)
     delete []str1;
     delete []str2;
     delete []counts;
+}
+
+BigPixelStr& operator+= (BigPixelStr & a, BigPixelStr const & b)
+{
+    a.r += b.r;
+    a.g += b.g;
+    a.b += b.b;
+    return a;
 }
 
 int main(int argc, char* argv[]){
@@ -243,7 +264,54 @@ int main(int argc, char* argv[]){
 
     int w = main_image.get_width();
     int h = main_image.get_height();
-    BigPixelStr ***war;
+    int n = HASH_LINE_SIZE;
+    BigPixelStr ***war = new BigPixelStr**[h];
+    for (int i = 0; i < h; ++i)
+    {
+        war[i] = new BigPixelStr*[w];
+        for (int j = 0; j < w; ++j)
+            war[i][j] = new BigPixelStr[parameters.max_scale + 1];
+    }
+    int a, b;
+    for (int l= 0; l < w - n; ++l)
+    {
+        for (int j = 0; j < h; ++j)
+        {
+            for (int k = 1; l + n * k < w && k < j + 2 && k <= parameters.max_scale; ++k)
+            {
+                int r = l + n * k;
+                BigPixelStr *hash = new BigPixelStr[n];
+                for (int i = 0; i < n; ++i)
+                    hash[i] = BigPixelStr();
+                for (int i = 1; i <= n; ++i)
+                {
+                    war[j][l + k * i - 1][k] = main_image.get_pixel(j, l + k * i - 1);
+                    if (j > 0 && i > 1)
+                        war[j][l + k * i - 1][k] += war[j - 1][l + k*i - 2][k - 1];
+                    for (int ii = 1; i < k; ++i)
+                    {
+                        war[j][l + k * i - 1][k] += war[j - ii][l + k*i - 1][1];
+                        war[j][l + k * i - 1][k] += war[j][l + k*i - ii - 1][1];
+                    }
+                    hash[i - 1].r = (int)war[j][l + k * i - 1][k].r / (k * k);
+                    hash[i - 1].g = (int)war[j][l + k * i - 1][k].g / (k * k);
+                    hash[i - 1].b = (int)war[j][l + k * i - 1][k].b / (k * k);
+                }
+                int32_t intHash = getHash(hash, n);
+                if (hashMap.find(intHash) != hashMap.end())
+                {
+                    int x = l + k * n / 2;
+                    int y = j;
+                    if ((x - a) * (x - a) + (y - b) * (y - b) > 200 * 200)
+                    {
+                        cout << x << " " << y << std::endl;
+                        a = x;
+                        b = y;
+                    }
+                }
+            }
+        }
+    }
 
     result_list.sort(compare_results);
 
