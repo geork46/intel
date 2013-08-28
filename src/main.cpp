@@ -59,7 +59,7 @@ BigPixelStr::BigPixelStr(PixelStr const &o) : r(o.r), g(o.g), b(o.b)
 inline PointR rotatePoint(Point const &p, int x, int y, double a_cos, double a_sin)
 {
     Point res( -p.x + x, -p.y + y);
-    return PointR(a_cos * res.x - a_sin * res.y, a_sin * res.x + a_cos * res.y);
+    return PointR(a_cos * res.x + a_sin * res.y, -a_sin * res.x + a_cos * res.y);
 }
 
 bool operator != (BigPixelStr const & a, PixelStr const & b)
@@ -75,18 +75,18 @@ int g(BigPixelStr* str1, PixelStr *str2, int n)
     return s;
 }
 
-int g(bool* str1, bool *str2, int n)
-{
-    int s = 0;
-    for (int i = 3 * n * (n / 2 - 2); i <  3 * n * (n / 2 + 2); ++i)
-        if (str1[i] != str2[i])
-            s++;
-    return s;
-}
+//int g(bool* str1, bool *str2, int n)
+//{
+//    int s = 0;
+//    for (int i = 3 * n * (n / 2 - 2); i <  3 * n * (n / 2 + 2); ++i)
+//        if (str1[i] != str2[i])
+//            s++;
+//    return s;
+//}
 
 bool g(uint32_t *a, uint32_t *b, int n)
 {
-    for (int i = n / 2 - 2; i < n / 2 + 2; ++i)
+    for (int i = n / 2 - 3; i < n / 2 + 3; ++i)
         if (a[i] != b[i])
             return false;
     return true;
@@ -134,8 +134,8 @@ void create_hash(string temp_name)
     int s = 0;
     for (double a = 0; a < 360; a += 0.2)
     {
-        double a_cos = cos(a * M_PI / 180);
-        double a_sin = sin(a * M_PI / 180);
+        double a_cos = cos(M_PI * a / 180);
+        double a_sin = sin(M_PI * a/ 180);
         for (int i = 0; i < n * n; ++i)
         {
             counts[i] = 0;
@@ -232,6 +232,50 @@ BigPixelStr& operator+= (BigPixelStr & a, BigPixelStr const & b)
     return a;
 }
 
+BigPixelStr& operator/= (BigPixelStr & a, int b)
+{
+    a.r /= b;
+    a.g /= b;
+    a.b /= b;
+    return a;
+}
+
+int hammingDistance(uint32_t a, uint32_t b)
+{
+    int s = 0;
+    a = a ^ b;
+    while (a > 0)
+    {
+        s += a % 2;
+        a /= 2;
+    }
+    return s;
+}
+
+bool analizeAnswer(int x, int y, int index, int num, int n, int scale, Image const & im)
+{
+    int sumError = 0;
+    BigPixelStr * str2 = new BigPixelStr[n];
+    int y0 = y - scale * num;
+    for (int i = 0; i < n; ++i)
+    {
+        for (int j = 0; j < n; ++j)
+        {
+            str2[j] = BigPixelStr();
+            for (int i1 = 0; i1 < scale; i1++)
+                for (int i2 = 0; i2 < scale; i2++)
+                    str2[j] += im.get_pixel(y0 + i * scale - i1, x + j *  scale + i2);
+            str2[j] /= scale * scale;
+        }
+        uint32_t intHash = getHash(str2, n);
+        sumError += hammingDistance(intHash, hashList[index].fullHash[i]);
+        if (sumError > 40)
+            return false;
+    }
+    delete []str2;
+    return true;
+}
+
 int main(int argc, char* argv[]){
 
 	Parameters parameters;
@@ -266,21 +310,22 @@ int main(int argc, char* argv[]){
     int h = main_image.get_height();
     int n = HASH_LINE_SIZE;
     BigPixelStr ***war = new BigPixelStr**[h];
+    bool **gmap;
     for (int i = 0; i < h; ++i)
     {
-        war[i] = new BigPixelStr*[w];
-        for (int j = 0; j < w; ++j)
-            war[i][j] = new BigPixelStr[parameters.max_scale + 1];
+        war[i] = new BigPixelStr*[w + 1];
+        for (int j = 0; j <= w; ++j)
+            war[i][j] = new BigPixelStr[parameters.max_scale * 10 + 1];
     }
     int a, b;
+    BigPixelStr *hash = new BigPixelStr[n];
     for (int l= 0; l < w - n; ++l)
     {
         for (int j = 0; j < h; ++j)
         {
-            for (int k = 1; l + n * k < w && k < j + 2 && k <= parameters.max_scale; ++k)
+            for (int k = 1; (l + n * k < w) && k < j + 2 && k <= parameters.max_scale  * 10 ; ++k)
             {
                 int r = l + n * k;
-                BigPixelStr *hash = new BigPixelStr[n];
                 for (int i = 0; i < n; ++i)
                     hash[i] = BigPixelStr();
                 for (int i = 1; i <= n; ++i)
@@ -288,7 +333,7 @@ int main(int argc, char* argv[]){
                     war[j][l + k * i - 1][k] = main_image.get_pixel(j, l + k * i - 1);
                     if (j > 0 && i > 1)
                         war[j][l + k * i - 1][k] += war[j - 1][l + k*i - 2][k - 1];
-                    for (int ii = 1; i < k; ++i)
+                    for (int ii = 1; ii < k; ++ii)
                     {
                         war[j][l + k * i - 1][k] += war[j - ii][l + k*i - 1][1];
                         war[j][l + k * i - 1][k] += war[j][l + k*i - ii - 1][1];
@@ -302,12 +347,16 @@ int main(int argc, char* argv[]){
                 {
                     int x = l + k * n / 2;
                     int y = j;
-                    if ((x - a) * (x - a) + (y - b) * (y - b) > 200 * 200)
+                    bool flag = analizeAnswer(l, j, hashMap[intHash].first, hashMap[intHash].second, n, k, main_image);
+                    if (flag)
                     {
-                        cout << x << " " << y << std::endl;
-                        a = x;
-                        b = y;
+                        cout << x << " " << y << " " << hashList[hashMap[intHash].first].angle << std::endl;
                     }
+//                    if ((x - a) * (x - a) + (y - b) * (y - b) > 200 * 200)
+//                    {
+//                        a = x;
+//                        b = y;
+//                    }
                 }
             }
         }
