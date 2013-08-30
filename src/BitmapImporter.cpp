@@ -30,7 +30,7 @@ Image Image::create_image_from_bitmap(const std::string file_name){
 		//Read the data
 		file.read((char*)data, size);
         //Create the Bitmap object
-        result.pixel_data = (PixelStr*) malloc(result.header.width*result.header.height*sizeof(PixelStr));
+        result.pixel_data = new PixelStr[result.header.width*result.header.height];
 		unsigned int offset = 0;
 		//In the Bitmap format, pixels are in a reversed order
         for(int i=result.header.height-1; i>=0; i--){
@@ -76,7 +76,7 @@ Image::Image(){
 }
 
 Image::~Image(){
-    free(pixel_data);
+    delete pixel_data;
 }
 
 PixelStr Image::get_pixel(unsigned int i, unsigned int j) const{
